@@ -1,0 +1,26 @@
+//devcontainer.json
+{
+    "name": "Zephyr environment",
+    "image": "docker.io/zephyrprojectrtos/zephyr-build:v0.28.6",
+    // Configure tool-specific properties.
+    "customizations": {
+        // Configure properties specific to VS Code.
+        "vscode": {
+            "settings": {},
+            "extensions": [
+                "ms-vscode.cpptools-extension-pack",
+                "mcu-debug.debug-tracker-vscode",
+                "mcu-debug.peripheral-viewer",
+                "mcu-debug.memory-view",
+                "marus25.cortex-debug"
+            ]
+        }
+    },
+    "postAttachCommand": [
+        "/bin/bash"
+    ],
+    "remoteUser": "user",
+    "runArgs": [
+        "--rm",
+    ]
+}

@@ -1,0 +1,32 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "showDevDebugOutput": true,
+    "configurations": [
+        {
+            "name": "Debug tlv320",
+            "type": "cortex-debug",
+            "request": "launch",
+            "servertype": "external",
+            "gdbTarget": "host.docker.internal:2331",
+            "svdFile": "modules/hal/nordic/nrfx/bsp/stable/mdk/nrf54l15_application.svd",
+            "cwd": "${workspaceFolder}",
+            "executable": "application/build/zephyr/zephyr.elf",
+            "interface": "swd",
+            "device": "nRF54L15_M33",
+            "overrideLaunchCommands": [
+                "monitor reset 0",
+                "-target-download",
+                "monitor reset 0"
+            ],
+            "overrideResetCommands": [
+                "monitor reset 0"
+            ],
+            "rtos": "Zephyr",
+            "showDevDebugOutput": "none",
+            "runToEntryPoint": "main"
+        }
+    ]
+}
