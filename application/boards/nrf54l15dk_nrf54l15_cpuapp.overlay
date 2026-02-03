@@ -26,9 +26,10 @@
     i2s20_default: i2s20_default {
         group1 {
             psels = 
-                <NRF_PSEL(I2S_SCK_M,   1, 4)>,
-                <NRF_PSEL(I2S_LRCK_M,  1, 5)>,
-                <NRF_PSEL(I2S_SDOUT, 1, 6)>;
+                <NRF_PSEL(I2S_SCK_M,  1, 4)>,
+                <NRF_PSEL(I2S_LRCK_M, 1, 5)>,
+                <NRF_PSEL(I2S_SDOUT,  1, 6)>,
+                <NRF_PSEL(I2S_MCK,    1, 7)>;
         };
     };
 };
@@ -53,7 +54,7 @@
 
         compatible = "ti,tlv320dac";
         reg = <0x18>;
-        reset-gpios = <&gpio1 7 GPIO_ACTIVE_LOW>;
+        reset-gpios = <&gpio1 8 GPIO_ACTIVE_LOW>;
     };
 };
 

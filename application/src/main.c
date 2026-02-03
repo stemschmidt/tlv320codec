@@ -52,7 +52,6 @@ static bool trigger_command(const struct device* i2s_dev_codec,
 int main(void) {
   const struct device* const i2s_dev_codec = DEVICE_DT_GET(I2S_CODEC_TX);
   const struct device* const codec_dev = DEVICE_DT_GET(DT_ALIAS(audio_codec));
-  struct i2s_config config;
   struct audio_codec_cfg audio_cfg = {0};
   int ret = 0;
 
@@ -70,7 +69,7 @@ int main(void) {
   audio_cfg.dai_route = AUDIO_ROUTE_PLAYBACK;
   audio_cfg.dai_type = AUDIO_DAI_TYPE_I2S;
   audio_cfg.dai_cfg.i2s.word_size = SAMPLE_BIT_WIDTH;
-  audio_cfg.dai_cfg.i2s.channels = 2;
+  audio_cfg.dai_cfg.i2s.channels = NUMBER_OF_CHANNELS;
   audio_cfg.dai_cfg.i2s.format = I2S_FMT_DATA_FORMAT_I2S;
 #ifdef CONFIG_USE_CODEC_CLOCK
   audio_cfg.dai_cfg.i2s.options =
@@ -80,29 +79,23 @@ int main(void) {
       I2S_OPT_FRAME_CLK_SLAVE | I2S_OPT_BIT_CLK_SLAVE;
 #endif
   audio_cfg.dai_cfg.i2s.frame_clk_freq = SAMPLE_FREQUENCY;
+  // Set requested_mck manually to 8000000 in nrfx_i2s.c!!!
+  audio_cfg.mclk_freq = 8000000;
   audio_cfg.dai_cfg.i2s.mem_slab = &mem_slab;
   audio_cfg.dai_cfg.i2s.block_size = BLOCK_SIZE;
-  audio_codec_configure(codec_dev, &audio_cfg);
-  k_msleep(1000);
+  audio_cfg.dai_cfg.i2s.timeout = TIMEOUT;
 
-  config.word_size = SAMPLE_BIT_WIDTH;
-  config.channels = NUMBER_OF_CHANNELS;
-  config.format = I2S_FMT_DATA_FORMAT_I2S;
-#ifdef CONFIG_USE_CODEC_CLOCK
-  config.options = I2S_OPT_BIT_CLK_SLAVE | I2S_OPT_FRAME_CLK_SLAVE;
-#else
-  config.options = I2S_OPT_BIT_CLK_MASTER | I2S_OPT_FRAME_CLK_MASTER;
-#endif
-  config.frame_clk_freq = SAMPLE_FREQUENCY;
-  config.mem_slab = &mem_slab;
-  config.block_size = BLOCK_SIZE;
-  config.timeout = TIMEOUT;
-  if (!configure_tx_streams(i2s_dev_codec, &config)) {
+  audio_codec_configure(codec_dev, &audio_cfg);
+  audio_codec_start_output(codec_dev);
+  k_msleep(1000);
+#if 1
+  if (!configure_tx_streams(i2s_dev_codec, &audio_cfg.dai_cfg.i2s)) {
     printk("failure to config streams\n");
     return 0;
   }
+#endif
   audio_property_value_t val;
-  val.vol = 0;
+  val.vol = -15;
   if (audio_codec_set_property(codec_dev, AUDIO_PROPERTY_OUTPUT_VOLUME,
                                AUDIO_CHANNEL_ALL, val) < 0) {
     printk("could not set volume\n");
