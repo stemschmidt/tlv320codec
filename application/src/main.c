@@ -1,5 +1,6 @@
 #include <zephyr/audio/codec.h>
 #include <zephyr/drivers/i2s.h>
+#include <zephyr/input/input.h>
 #include <zephyr/kernel.h>
 #include <zephyr/sys/printk.h>
 #include <zephyr/toolchain.h>
@@ -22,6 +23,26 @@
 
 K_MEM_SLAB_DEFINE_IN_SECT_STATIC(mem_slab, __nocache, BLOCK_SIZE, BLOCK_COUNT,
                                  4);
+
+volatile int8_t update = 0;
+static void key_press(struct input_event* evt, void* user_data) {
+  printk("keypress: %d %d\n", evt->code, evt->value);
+  if (evt->value != 1) {
+    return;
+  }
+
+  switch (evt->code) {
+    case 2:
+      update = 10;
+      break;
+    case 4:
+      update = -10;
+      break;
+    default:
+      break;
+  }
+}
+INPUT_CALLBACK_DEFINE(NULL, key_press, NULL);
 
 static bool configure_tx_streams(const struct device* i2s_dev,
                                  struct i2s_config* config) {
@@ -54,6 +75,7 @@ int main(void) {
   const struct device* const codec_dev = DEVICE_DT_GET(DT_ALIAS(audio_codec));
   struct audio_codec_cfg audio_cfg = {0};
   int ret = 0;
+  int volume = -30;
 
   printk("codec sample\n");
 
@@ -88,19 +110,20 @@ int main(void) {
   audio_codec_configure(codec_dev, &audio_cfg);
   audio_codec_start_output(codec_dev);
   k_msleep(1000);
-#if 1
+
   if (!configure_tx_streams(i2s_dev_codec, &audio_cfg.dai_cfg.i2s)) {
     printk("failure to config streams\n");
     return 0;
   }
-#endif
-  audio_property_value_t val;
-  val.vol = -15;
+
+  audio_property_value_t val = {0};
+  val.vol = volume;
   if (audio_codec_set_property(codec_dev, AUDIO_PROPERTY_OUTPUT_VOLUME,
                                AUDIO_CHANNEL_ALL, val) < 0) {
     printk("could not set volume\n");
     return -EIO;
   }
+
   val.mute = false;
   if (audio_codec_set_property(codec_dev, AUDIO_PROPERTY_OUTPUT_MUTE,
                                AUDIO_CHANNEL_ALL, val) < 0) {
@@ -117,6 +140,23 @@ int main(void) {
       uint32_t block_size = BLOCK_SIZE;
       int i;
 
+      if (update != 0) {
+        update += volume;
+        if (update > 0) {
+          volume = 0;
+        } else if (update < -75) {
+          volume = -75;
+        } else {
+          volume = update;
+        }
+        update = 0;
+        val.vol = volume;
+        printk("set volume %d\n", val.vol);
+        if (audio_codec_set_property(codec_dev, AUDIO_PROPERTY_OUTPUT_VOLUME,
+                                     AUDIO_CHANNEL_ALL, val) < 0) {
+          printk("could not set volume\n");
+        }
+      }
       for (i = 0; i < CONFIG_I2S_INIT_BUFFERS; i++) {
         //        BUILD_ASSERT(BLOCK_SIZE <= __16kHz16bit_stereo_sine_pcm_len,
         //                     "BLOCK_SIZE is bigger than test sine wave buffer
@@ -126,12 +166,12 @@ int main(void) {
         ret = i2s_buf_write(i2s_dev_codec, mem_block, block_size);
         if (ret < 0) {
           printk("Failed to write data: %d\n", ret);
-          break;
+          //         break;
         }
       }
       if (ret < 0) {
         printk("error %d\n", ret);
-        break;
+        //       break;
       }
       if (!started) {
         i2s_trigger(i2s_dev_codec, I2S_DIR_TX, I2S_TRIGGER_START);
