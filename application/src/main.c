@@ -79,8 +79,8 @@ int main(void) {
       I2S_OPT_FRAME_CLK_SLAVE | I2S_OPT_BIT_CLK_SLAVE;
 #endif
   audio_cfg.dai_cfg.i2s.frame_clk_freq = SAMPLE_FREQUENCY;
-  // Set requested_mck manually to 8000000 in nrfx_i2s.c!!!
-  audio_cfg.mclk_freq = 8000000;
+  // Set requested_mck manually to 16000000 in nrfx_i2s.c!!!
+  audio_cfg.mclk_freq = 16000000;
   audio_cfg.dai_cfg.i2s.mem_slab = &mem_slab;
   audio_cfg.dai_cfg.i2s.block_size = BLOCK_SIZE;
   audio_cfg.dai_cfg.i2s.timeout = TIMEOUT;
