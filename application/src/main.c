@@ -4,12 +4,11 @@
 #include <math.h>
 #include <stdint.h>
 
-#define SAMPLE_FREQUENCY 16000U
 #define SAMPLE_BIT_WIDTH 16U
 #define NUMBER_OF_CHANNELS 2U
 #define BLOCK_DURATION_MS 100U
 
-#define SAMPLES_PER_BLOCK ((SAMPLE_FREQUENCY * BLOCK_DURATION_MS) / 1000 * NUMBER_OF_CHANNELS)
+#define SAMPLES_PER_BLOCK ((CONFIG_SAMPLE_FREQ * BLOCK_DURATION_MS) / 1000 * NUMBER_OF_CHANNELS)
 #define BYTES_PER_SAMPLE (SAMPLE_BIT_WIDTH / 8U)
 #define BLOCK_SIZE (SAMPLES_PER_BLOCK * BYTES_PER_SAMPLE)
 #define BLOCK_COUNT 4U
@@ -39,7 +38,7 @@ static inline int32_t f2q15(float f) {
 /* Initialisierung rekursiver Q15-Oszillator */
 static void osc_init(void)
 {
-    float w = 2.0f * M_PI * freq / SAMPLE_FREQUENCY;
+    float w = 2.0f * M_PI * freq / CONFIG_SAMPLE_FREQ;
     coeff = f2q15(2.0f * cosf(w));
 
     y1 = f2q15(sinf(w) * ((float)amplitude / 32767.0f));
@@ -126,7 +125,7 @@ int main(void)
 #else
     cfg.options = I2S_OPT_FRAME_CLK_SLAVE | I2S_OPT_BIT_CLK_SLAVE;
 #endif
-    cfg.frame_clk_freq = SAMPLE_FREQUENCY;
+    cfg.frame_clk_freq = CONFIG_SAMPLE_FREQ;
     cfg.mem_slab = &mem_slab;
     cfg.block_size = BLOCK_SIZE;
     cfg.timeout = 2000U;
