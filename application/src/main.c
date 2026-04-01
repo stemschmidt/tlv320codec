@@ -25,44 +25,20 @@ K_MEM_SLAB_DEFINE(mem_slab, BLOCK_SIZE, BLOCK_COUNT, 4);
 const struct device* i2s_dev;
 
 /* Fixed-Point Q15 Oszillator */
-static int32_t y1, y2;       // Q15 Werte
-static int32_t coeff;         // Q15 Koef
-static int16_t amplitude = 30000; // max int16 für Audio
+static float amplitude = 30000.0; // max int16 für Audio
 static float freq = 440.0f;  // Frequenz A4
-
-/* Helper: float -> Q15 */
-static inline int32_t f2q15(float f) {
-    return (int32_t)(f * 32767.0f);
-}
-
-/* Initialisierung rekursiver Q15-Oszillator */
-static void osc_init(void)
-{
-    float w = 2.0f * M_PI * freq / CONFIG_SAMPLE_FREQ;
-    coeff = f2q15(2.0f * cosf(w));
-
-    y1 = f2q15(sinf(w) * ((float)amplitude / 32767.0f));
-    y2 = 0;
-}
 
 /* Blockweise Sinus-Generierung */
 static void generate_sine_block(int16_t *samples, size_t frames)
 {
+    float phase = 0.0;
     for (size_t i = 0; i < frames; i++) {
-        int32_t val = ((coeff * y1) >> 15) - y2;
+      phase += 2.0f * M_PI * freq / CONFIG_SAMPLE_FREQ;
+      int16_t val16 = (int16_t)(amplitude * sinf(phase));
 
-        y2 = y1;
-        y1 = val;
-
-        /* Clamp auf int16 */
-        if (val > 32767) val = 32767;
-        if (val < -32768) val = -32768;
-
-        int16_t val16 = (int16_t)val;
-
-        /* Stereo interleaved */
-        samples[2*i + 0] = val16;
-        samples[2*i + 1] = val16;
+      /* Stereo interleaved */
+      samples[2*i + 0] = val16;
+      samples[2*i + 1] = val16;
     }
 }
 
@@ -134,9 +110,6 @@ int main(void)
         printk("I2S configure failed\n");
         return -1;
     }
-
-    /* Oszillator initialisieren */
-    osc_init();
 
     /* Starte Audio-Streaming */
     audio_stream_loop();
