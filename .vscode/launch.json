@@ -11,7 +11,7 @@
             "request": "launch",
             "servertype": "external",
             "gdbTarget": "localhost:2331",
-            "svdFile": "modules/hal/nordic/nrfx/bsp/stable/mdk/nrf54l15_application.svd",
+            "svdFile": "modules/hal/nordic/nrfx/bsp/stable/mdk/nrf54l/nrf54l15/nrf54l15_application.svd",
             "cwd": "${workspaceFolder}",
             "executable": "application/build/zephyr/zephyr.elf",
             "interface": "swd",

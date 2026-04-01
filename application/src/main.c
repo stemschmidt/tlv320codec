@@ -1,198 +1,186 @@
+#include <stdint.h>
+#include <stddef.h>
+#include <string.h>
+#include <math.h>
+
 #include <zephyr/audio/codec.h>
+#include <zephyr/drivers/gpio.h>
 #include <zephyr/drivers/i2s.h>
-#include <zephyr/input/input.h>
 #include <zephyr/kernel.h>
 #include <zephyr/sys/printk.h>
-#include <zephyr/toolchain.h>
 
-#include "sine.h"
-
-#define I2S_CODEC_TX DT_ALIAS(i2s_codec_tx)
-
-#define SAMPLE_FREQUENCY CONFIG_SAMPLE_FREQ
-#define SAMPLE_BIT_WIDTH CONFIG_SAMPLE_WIDTH
-#define BYTES_PER_SAMPLE CONFIG_BYTES_PER_SAMPLE
-#define NUMBER_OF_CHANNELS (2U)
-/* Such block length provides an echo with the delay of 100 ms. */
-#define SAMPLES_PER_BLOCK ((SAMPLE_FREQUENCY / 10) * NUMBER_OF_CHANNELS)
-#define INITIAL_BLOCKS CONFIG_I2S_INIT_BUFFERS
-#define TIMEOUT (2000U)
-
-#define BLOCK_SIZE (BYTES_PER_SAMPLE * SAMPLES_PER_BLOCK)
-#define BLOCK_COUNT (INITIAL_BLOCKS + CONFIG_EXTRA_BLOCKS)
-
-static int volume = -70;
-
-K_MEM_SLAB_DEFINE_IN_SECT_STATIC(mem_slab, __nocache, BLOCK_SIZE, BLOCK_COUNT,
-                                 4);
-static struct k_work volume_work;
-static void volume_work_handler (struct k_work *work);
-static K_WORK_DEFINE(volume_work, volume_work_handler);
-static const struct device* const codec_dev = DEVICE_DT_GET(DT_ALIAS(audio_codec));
-
-volatile int8_t update = 0;
-static void key_press(struct input_event* evt, void* user_data) {
-  printk("keypress: %d %d\n", evt->code, evt->value);
-  if (evt->value != 1) {
-    return;
-  }
-
-  switch (evt->code) {
-    case 2:
-      update = 10;
-      break;
-    case 4:
-      update = -10;
-      break;
-    default:
-      break;
-  }
-
-  if (update != 0) {
-    k_work_submit(&volume_work);
-  }
-}
-INPUT_CALLBACK_DEFINE(NULL, key_press, NULL);
-
-static bool configure_tx_streams(const struct device* i2s_dev,
-                                 struct i2s_config* config) {
-  int ret;
-
-  ret = i2s_configure(i2s_dev, I2S_DIR_TX, config);
-  if (ret < 0) {
-    printk("Failed to configure codec stream: %d\n", ret);
-    return false;
-  }
-
-  return true;
-}
-
-static bool trigger_command(const struct device* i2s_dev_codec,
-                            enum i2s_trigger_cmd cmd) {
-  int ret;
-
-  ret = i2s_trigger(i2s_dev_codec, I2S_DIR_TX, cmd);
-  if (ret < 0) {
-    printk("Failed to trigger command %d on TX: %d\n", cmd, ret);
-    return false;
-  }
-
-  return true;
-}
-
-
-static void volume_work_handler (struct k_work *work) {
-  if (update != 0) {
-    update += volume;
-    if (update > 0) {
-      volume = 0;
-    } else if (update < -70) {
-      volume = -70;
-    } else {
-      volume = update;
-    }
-    update = 0;
-    audio_property_value_t val = {.vol = volume * 2};
-    printk("set volume %d\n", val.vol);
-    if (audio_codec_set_property(codec_dev, AUDIO_PROPERTY_OUTPUT_VOLUME,
-                                  AUDIO_CHANNEL_ALL, val) < 0) {
-      printk("could not set volume\n");
-    }
-  }
-}
-
-int main(void) {
-  const struct device* const i2s_dev_codec = DEVICE_DT_GET(I2S_CODEC_TX);
-  struct audio_codec_cfg audio_cfg = {0};
-  int ret = 0;
-
-  printk("codec sample\n");
-
-  if (!device_is_ready(i2s_dev_codec)) {
-    printk("%s is not ready\n", i2s_dev_codec->name);
-    return 0;
-  }
-
-  if (!device_is_ready(codec_dev)) {
-    printk("%s is not ready", codec_dev->name);
-    return 0;
-  }
-  audio_cfg.dai_route = AUDIO_ROUTE_PLAYBACK;
-  audio_cfg.dai_type = AUDIO_DAI_TYPE_I2S;
-  audio_cfg.dai_cfg.i2s.word_size = SAMPLE_BIT_WIDTH;
-  audio_cfg.dai_cfg.i2s.channels = NUMBER_OF_CHANNELS;
-  audio_cfg.dai_cfg.i2s.format = I2S_FMT_DATA_FORMAT_I2S;
-#ifdef CONFIG_USE_CODEC_CLOCK
-  audio_cfg.dai_cfg.i2s.options =
-      I2S_OPT_FRAME_CLK_MASTER | I2S_OPT_BIT_CLK_MASTER;
-#else
-  audio_cfg.dai_cfg.i2s.options =
-      I2S_OPT_FRAME_CLK_SLAVE | I2S_OPT_BIT_CLK_SLAVE;
+#define SAMPLE_BIT_WIDTH   16
+#define NUMBER_OF_CHANNELS 2U
+#define SAMPLES_PER_BLOCK  128U
+#define BLOCK_SIZE         (SAMPLES_PER_BLOCK * sizeof(int16_t) * NUMBER_OF_CHANNELS)
+#define BLOCK_COUNT        4U
+#define TWO_POW_32         4294967296.0
+#ifndef M_PI
+#define M_PI ((double)3.14159265358979323846)
 #endif
-  audio_cfg.dai_cfg.i2s.frame_clk_freq = SAMPLE_FREQUENCY;
-  // Set requested_mck manually to 16000000 in nrfx_i2s.c!!!
-  audio_cfg.mclk_freq = 16000000;
-  audio_cfg.dai_cfg.i2s.mem_slab = &mem_slab;
-  audio_cfg.dai_cfg.i2s.block_size = BLOCK_SIZE;
-  audio_cfg.dai_cfg.i2s.timeout = TIMEOUT;
 
-  audio_codec_configure(codec_dev, &audio_cfg);
-  audio_codec_start_output(codec_dev);
-  k_msleep(1000);
+#define TEST_FREQ_DOUBLE 440.0
 
-  if (!configure_tx_streams(i2s_dev_codec, &audio_cfg.dai_cfg.i2s)) {
-    printk("failure to config streams\n");
-    return 0;
-  }
+K_MEM_SLAB_DEFINE(mem_slab, BLOCK_SIZE, BLOCK_COUNT, 4);
 
-  audio_property_value_t val = {0};
-  val.vol = volume;
-  if (audio_codec_set_property(codec_dev, AUDIO_PROPERTY_OUTPUT_VOLUME,
-                               AUDIO_CHANNEL_ALL, val) < 0) {
-    printk("could not set volume\n");
-    return -EIO;
-  }
+/* LED toggles for each block write. */
+#define LED0_NODE DT_ALIAS(led0)
+static const struct gpio_dt_spec led = GPIO_DT_SPEC_GET(LED0_NODE, gpios);
+#define I2S_CODEC_TX DT_ALIAS(i2s_codec_tx)
+const struct device *i2s_dev;
+#define AUDIO_CODEC DT_ALIAS(audio_codec)
+const struct device *codec_dev;
 
-  val.mute = false;
-  if (audio_codec_set_property(codec_dev, AUDIO_PROPERTY_OUTPUT_MUTE,
-                               AUDIO_CHANNEL_ALL, val) < 0) {
-    printk("could not set mute\n");
-    return -EIO;
-  }
+typedef struct {
+	int16_t l, r;
+} frame_t;
 
-  printk("start streams\n");
-  bool started = false;
+/* Sine generator state. */
+typedef struct {
+	uint32_t phase;     /* 0 .. 2^32-1  relates to 0 .. 2*pi. */
+	uint32_t phase_inc; /* Phase increment per sample. */
+	int16_t amplitude;  /* Ampitude of the sine. */
+} sine_gen_t;
 
-  while (1) {
-    void* mem_block;
-    uint32_t block_size = BLOCK_SIZE;
-    int i;
+static sine_gen_t gen;
 
-    for (i = 0; i < CONFIG_I2S_INIT_BUFFERS; i++) {
-      BUILD_ASSERT(BLOCK_SIZE <= __16kHz16bit_stereo_sine_pcm_len,
-                   "BLOCK_SIZE is bigger than test sine wave buffer \
-                           size.");
-      mem_block = (void*)&__16kHz16bit_stereo_sine_pcm;
+/* Set frequency, sampling rate, amplitude. */
+void sine_gen_set(sine_gen_t *g, double freq_hz, double fs_hz, int16_t amplitude)
+{
+	double cycles_per_sample = freq_hz / fs_hz;
+	cycles_per_sample -= floor(cycles_per_sample);
+	g->phase_inc = (uint32_t)(cycles_per_sample * TWO_POW_32);
+	g->amplitude = amplitude;
+}
 
-      ret = i2s_buf_write(i2s_dev_codec, mem_block, block_size);
-      if (ret < 0) {
-        printk("Failed to write data: %d\n", ret);
-        //         break;
-      }
-    }
-    if (ret < 0) {
-      printk("error %d\n", ret);
-      //       break;
-    }
-    if (!started) {
-      i2s_trigger(i2s_dev_codec, I2S_DIR_TX, I2S_TRIGGER_START);
-      started = true;
-    }
-  }
-  if (!trigger_command(i2s_dev_codec, I2S_TRIGGER_DROP)) {
-    printk("Send I2S trigger DRAIN failed: %d", ret);
-    return 0;
-  }
-  printk("Streams stopped\n");
-  return 0;
+/* Fill buffer with n frames (same value for both channels). */
+void sine_gen_fill(sine_gen_t *g, frame_t *buf, size_t n)
+{
+	for (size_t i = 0; i < n; i++) {
+		double angle = (double)g->phase * (2.0 * M_PI / TWO_POW_32);
+		int16_t s = (int16_t)lrint(sin(angle) * g->amplitude);
+		buf[i].l = s;
+		buf[i].r = s;
+		g->phase += g->phase_inc;
+	}
+}
+
+/* Example:
+ *
+ *   static frame_t buffer[256];
+ *   static sine_gen_t gen;
+ *
+ *   sine_gen_set(&gen, 1000.0, 48000.0, 30000);
+ *   sine_gen_fill(&gen, buffer, 256);
+ *
+ */
+
+static void audio_stream_loop(void)
+{
+	frame_t *samples = NULL;
+
+	/* 1. Pre-fill buffer. */
+	for (int i = 0; i < BLOCK_COUNT; i++) {
+		void *mem_block;
+		if (k_mem_slab_alloc(&mem_slab, &mem_block, K_FOREVER) < 0) {
+			continue;
+		}
+
+		samples = (frame_t *)mem_block;
+		sine_gen_fill(&gen, samples, SAMPLES_PER_BLOCK);
+
+		if (i2s_write(i2s_dev, mem_block, BLOCK_SIZE) < 0) {
+			printk("i2s_write failed during prefill\n");
+		}
+	}
+
+	/* 2. Start I2S. */
+	if (i2s_trigger(i2s_dev, I2S_DIR_TX, I2S_TRIGGER_START) < 0) {
+		printk("I2S trigger start failed\n");
+		return;
+	}
+
+	/* 3. Continuously generate new blocks. */
+	while (1) {
+		void *mem_block;
+
+		if (k_mem_slab_alloc(&mem_slab, &mem_block, K_FOREVER) < 0) {
+			continue;
+		}
+
+		samples = (frame_t *)mem_block;
+		sine_gen_fill(&gen, samples, SAMPLES_PER_BLOCK);
+
+		gpio_pin_toggle_dt(&led);
+
+		if (i2s_write(i2s_dev, mem_block, BLOCK_SIZE) < 0) {
+			printk("i2s_write failed\n");
+		}
+	}
+}
+
+int main(void)
+{
+	printk("Sine Test\n");
+
+	sine_gen_set(&gen, TEST_FREQ_DOUBLE, (double)CONFIG_SAMPLE_FREQ, 30000);
+
+	i2s_dev = DEVICE_DT_GET(I2S_CODEC_TX);
+	if (!device_is_ready(i2s_dev)) {
+		printk("I2S device not ready\n");
+		return -1;
+	}
+
+	codec_dev = DEVICE_DT_GET(AUDIO_CODEC);
+	if (!device_is_ready(codec_dev)) {
+		printk("Audio codec not ready\n");
+		return -1;
+	}
+
+	if (!gpio_is_ready_dt(&led)) {
+		return 0;
+	}
+
+	gpio_pin_configure_dt(&led, GPIO_OUTPUT_ACTIVE);
+
+	struct i2s_config cfg = {0};
+	cfg.word_size = SAMPLE_BIT_WIDTH;
+	cfg.channels = NUMBER_OF_CHANNELS;
+	cfg.format = I2S_FMT_DATA_FORMAT_I2S;
+	cfg.options = I2S_OPT_FRAME_CLK_CONTROLLER | I2S_OPT_BIT_CLK_CONTROLLER;
+	cfg.frame_clk_freq = CONFIG_SAMPLE_FREQ;
+	cfg.mem_slab = &mem_slab;
+	cfg.block_size = BLOCK_SIZE;
+	cfg.timeout = 2000U;
+
+	if (i2s_configure(i2s_dev, I2S_DIR_TX, &cfg) < 0) {
+		printk("I2S configure failed\n");
+		return -1;
+	}
+
+	struct audio_codec_cfg codec_cfg = {
+		.dai_type = AUDIO_DAI_TYPE_I2S,
+		.dai_route = AUDIO_ROUTE_PLAYBACK,
+		.dai_cfg.i2s =
+			{
+				.word_size = SAMPLE_BIT_WIDTH,
+				.channels = NUMBER_OF_CHANNELS,
+				.format = I2S_FMT_DATA_FORMAT_I2S,
+				.options = I2S_OPT_BIT_CLK_TARGET | I2S_OPT_FRAME_CLK_TARGET,
+				.frame_clk_freq = CONFIG_SAMPLE_FREQ,
+			},
+	};
+
+	int ret = audio_codec_configure(codec_dev, &codec_cfg);
+
+	if (ret < 0) {
+		printk("Codec configure failed: %d\n", ret);
+		return -1;
+	}
+
+	audio_codec_start_output(codec_dev);
+
+	audio_stream_loop();
+
+	return 0;
 }

@@ -1,7 +1,8 @@
 //devcontainer.json
 {
     "name": "Zephyr environment",
-    "image": "docker.io/zephyrprojectrtos/zephyr-build:v0.28.6",
+    "image": "docker.io/zephyrprojectrtos/zephyr-build:v0.29.3",
+    "postStartCommand": "/bin/bash",
     // Configure tool-specific properties.
     "customizations": {
         // Configure properties specific to VS Code.
@@ -26,11 +27,9 @@
             ]
         }
     },
-    "postAttachCommand": [
-        "/bin/bash"
-    ],
     "remoteUser": "user",
     "runArgs": [
-        "--network=host"
-    ],
+        "--network=host",
+        "--rm"
+    ]
 }

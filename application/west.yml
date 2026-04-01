@@ -6,9 +6,18 @@ manifest:
   # "projects" is a list of git repositories which make up the project
   projects:
     - name: zephyr
-      url: https://github.com/zephyrproject-rtos/zephyr.git
-      revision: main
-      import: true
+      url: https://github.com/stemschmidt/zephyr.git
+      revision: tlv320dac3100
+      import:
+        name-allowlist:
+          - cmsis
+          - cmsis_6
+          - hal_nordic
+          - mbedtls
+          - mbedtls-3.6
+          - segger
+          - tf-psa-crypto
+          - zephyr
   
   self:
     # This repository should be cloned to application.
