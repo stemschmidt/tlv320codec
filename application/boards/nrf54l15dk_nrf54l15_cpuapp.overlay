@@ -6,6 +6,7 @@
 / {
      aliases {
             audio-codec = &tlv320dac;
+            codec0 = &tlv320dac;
        		i2s-codec-tx = &i2s20;
      };
 };
@@ -17,8 +18,8 @@
     i2c20_default: i2c20_default {
         group1 {
             psels = 
-                <NRF_PSEL(TWIM_SDA, 1, 11)>,
-                <NRF_PSEL(TWIM_SCL, 1, 13)>;
+                <NRF_PSEL(TWIM_SDA, 1, 13)>,
+                <NRF_PSEL(TWIM_SCL, 1, 12)>; /* clk pin! */
         };
     };
 
@@ -29,7 +30,7 @@
                 <NRF_PSEL(I2S_SCK_M,  1, 4)>,
                 <NRF_PSEL(I2S_LRCK_M, 1, 5)>,
                 <NRF_PSEL(I2S_SDOUT,  1, 6)>,
-                <NRF_PSEL(I2S_MCK,    1, 7)>;
+                <NRF_PSEL(I2S_MCK,    1, 11)>; /* clk pin! */
         };
     };
 };
@@ -54,7 +55,7 @@
 
         compatible = "ti,tlv320dac";
         reg = <0x18>;
-        reset-gpios = <&gpio1 8 GPIO_ACTIVE_LOW>;
+        reset-gpios = <&gpio1 7 GPIO_ACTIVE_LOW>;
         use-volume-control-pin;
     };
 };
@@ -65,4 +66,5 @@
 
     pinctrl-0 = <&i2s20_default>;
     pinctrl-names = "default";
+    clock-source = "PCLK32M";
 };
