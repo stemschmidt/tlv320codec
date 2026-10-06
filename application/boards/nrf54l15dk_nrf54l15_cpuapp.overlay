@@ -66,5 +66,4 @@
 
     pinctrl-0 = <&i2s20_default>;
     pinctrl-names = "default";
-    clock-source = "PCLK32M";
 };

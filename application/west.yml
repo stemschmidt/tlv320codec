@@ -6,8 +6,8 @@ manifest:
   # "projects" is a list of git repositories which make up the project
   projects:
     - name: zephyr
-      url: https://github.com/zephyrproject-rtos/zephyr.git
-      revision: v4.4.0
+      url: https://github.com/stemschmidt/zephyr.git
+      revision: tlv320dac3100
       import:
         name-allowlist:
           - cmsis

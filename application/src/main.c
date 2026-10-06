@@ -29,15 +29,15 @@ const struct device *i2s_dev;
 const struct device *codec_dev;
 
 /* Fixed-Point Q15 Oszillator */
-static float amplitude = 30000.0; // max int16 für Audio
-static float freq = 440.0f;       // Frequenz A4
-
+static const float amplitude = 30000.0; // max int16 für Audio
+static const float freq = 440.0f;       // Frequenz A4
+static const float phase_inc = 2.0f * M_PI * freq / CONFIG_SAMPLE_FREQ;
 /* Blockweise Sinus-Generierung */
 static void generate_sine_block(int16_t *samples, size_t frames)
 {
-	float phase = 0.0;
+	static float phase = 0.0;
 	for (size_t i = 0; i < frames; i++) {
-		phase += 2.0f * M_PI * freq / CONFIG_SAMPLE_FREQ;
+		phase += phase_inc;
 		int16_t val16 = (int16_t)(amplitude * sinf(phase));
 
 		/* Stereo interleaved */
@@ -122,7 +122,7 @@ int main(void)
 	}
 
 	struct audio_codec_cfg codec_cfg = {
-		.mclk_freq = 32000000,
+		.mclk_freq = 8000000,
 		.dai_type = AUDIO_DAI_TYPE_I2S,
 		.dai_route = AUDIO_ROUTE_PLAYBACK,
 		.dai_cfg.i2s =
