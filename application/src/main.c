@@ -122,7 +122,7 @@ int main(void)
 	}
 
 	struct audio_codec_cfg codec_cfg = {
-		.mclk_freq = 8000000,
+		.mclk_freq = 16000000,
 		.dai_type = AUDIO_DAI_TYPE_I2S,
 		.dai_route = AUDIO_ROUTE_PLAYBACK,
 		.dai_cfg.i2s =
