@@ -57,6 +57,7 @@
         reg = <0x18>;
         reset-gpios = <&gpio1 7 GPIO_ACTIVE_LOW>;
         use-volume-control-pin;
+        use-internal-pll;
     };
 };
 

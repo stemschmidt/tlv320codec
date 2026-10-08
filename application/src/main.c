@@ -1,9 +1,11 @@
+#include <stdint.h>
+#include <string.h>
+#include <math.h>
+
 #include <zephyr/audio/codec.h>
 #include <zephyr/drivers/i2s.h>
 #include <zephyr/kernel.h>
 #include <zephyr/sys/printk.h>
-#include <math.h>
-#include <stdint.h>
 
 #define SAMPLE_BIT_WIDTH   16U
 #define NUMBER_OF_CHANNELS 2U
@@ -28,21 +30,63 @@ const struct device *i2s_dev;
 #define AUDIO_CODEC DT_ALIAS(audio_codec)
 const struct device *codec_dev;
 
-/* Fixed-Point Q15 Oszillator */
-static const float amplitude = 30000.0; // max int16 für Audio
-static const float freq = 440.0f;       // Frequenz A4
-static const float phase_inc = 2.0f * M_PI * freq / CONFIG_SAMPLE_FREQ;
-/* Blockweise Sinus-Generierung */
+#define TONE_FREQ 440
+#define AMPLITUDE 16000.0
+
+#define MAX_PERIOD 4800 /* Obergrenze für den Puffer, siehe Hinweis unten */
+
+typedef struct {
+	int16_t l, r;
+} frame_t;
+
+static frame_t period_buf[MAX_PERIOD];
+static size_t period_len;
+static size_t pos;
+
+static uint32_t gcd_u32(uint32_t a, uint32_t b)
+{
+	while (b) {
+		uint32_t t = a % b;
+		a = b;
+		b = t;
+	}
+	return a;
+}
+
+void sine_init(void)
+{
+	period_len = CONFIG_SAMPLE_FREQ / gcd_u32(CONFIG_SAMPLE_FREQ, TONE_FREQ);
+	/* period_len <= MAX_PERIOD sicherstellen (assert o. ä.) */
+
+	for (size_t n = 0; n < period_len; n++) {
+		/* Phase über (f*n) mod fs berechnen: exakt, keine Drift */
+		double ph = 2.0 * M_PI * (double)((uint64_t)TONE_FREQ * n % CONFIG_SAMPLE_FREQ) /
+			    CONFIG_SAMPLE_FREQ;
+		int16_t v = (int16_t)lrint(AMPLITUDE * sin(ph));
+		period_buf[n].l = v;
+		period_buf[n].r = v;
+	}
+	pos = 0;
+}
+
 static void generate_sine_block(int16_t *samples, size_t frames)
 {
-	static float phase = 0.0;
-	for (size_t i = 0; i < frames; i++) {
-		phase += phase_inc;
-		int16_t val16 = (int16_t)(amplitude * sinf(phase));
+	uint8_t *out = (uint8_t *)samples;
 
-		/* Stereo interleaved */
-		samples[2 * i + 0] = val16;
-		samples[2 * i + 1] = val16;
+	while (frames) {
+		size_t chunk = period_len - pos;
+		if (chunk > frames) {
+			chunk = frames;
+		}
+
+		memcpy(out, &period_buf[pos], chunk * sizeof(frame_t));
+
+		out += chunk * sizeof(frame_t);
+		frames -= chunk;
+		pos += chunk;
+		if (pos == period_len) {
+			pos = 0;
+		}
 	}
 }
 
@@ -94,6 +138,8 @@ int main(void)
 {
 	printk("Zero-Copy I2S Fixed-Point Sine Test\n");
 
+	sine_init();
+
 	i2s_dev = DEVICE_DT_GET(I2S_CODEC_TX);
 	if (!device_is_ready(i2s_dev)) {
 		printk("I2S device not ready\n");
@@ -122,7 +168,7 @@ int main(void)
 	}
 
 	struct audio_codec_cfg codec_cfg = {
-		.mclk_freq = 16000000,
+		.mclk_freq = 32000000,
 		.dai_type = AUDIO_DAI_TYPE_I2S,
 		.dai_route = AUDIO_ROUTE_PLAYBACK,
 		.dai_cfg.i2s =
